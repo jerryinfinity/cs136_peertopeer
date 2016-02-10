@@ -8,10 +8,11 @@
 
 import random
 import logging
-
+import heapq
 from messages import Upload, Request
 from util import even_split
 from peer import Peer
+import itertools
 
 class JERONStd(Peer):
     def post_init(self):
@@ -30,7 +31,7 @@ class JERONStd(Peer):
         """
         needed = lambda i: self.pieces[i] < self.conf.blocks_per_piece
         needed_pieces = filter(needed, range(len(self.pieces)))
-        np_set = set(needed_pieces)  # sets support fast intersection ops.
+        #np_set = set(needed_pieces)  # sets support fast intersection ops.
 
 
         logging.debug("%s here: still need pieces %s" % (
@@ -44,30 +45,96 @@ class JERONStd(Peer):
         logging.debug("look at the AgentHistory class in history.py for details")
         logging.debug(str(history))
 
+        availability = [(0,0)] * self.conf.num_pieces
+        for peer in peers:
+            for piece_id in peer.available_pieces:
+                if piece_id in needed_pieces:
+                    availability[piece_id] = (availability[piece_id][0] + 1, piece_id)
+
+        # create heap to keep track of most rare items, deleting empty elements (that the agent doesn't need)
+        availability = [y for y in availability if y != (0,0)]
+        #heapify a randomized availability list so that within each level of availability in the heap, elements are in random order
+        random.shuffle(availability)
+        heapq.heapify(availability)
+
+        logging.debug("Availability: " + `availability`)
+
+
         requests = []   # We'll put all the things we want here
         # Symmetry breaking is good...
-        random.shuffle(needed_pieces)
+        #probably don't need this now
+        #random.shuffle(needed_pieces)
         
-        # Sort peers by id.  This is probably not a useful sort, but other 
-        # sorts might be useful
-        peers.sort(key=lambda p: p.id)
+        to_request = []
+        count = 0
+        while (len(availability) > 0 and count < self.max_requests * len(peers)):
+            to_request.append(heapq.heappop(availability))
+            count += 1
+        logging.debug("To request: " + `to_request`)
+
+
+        #compute ranked list of people I've contributed the most to from last 3 rounds (most likely to reciprocate/TfT)
+        agents = {}
+        for r in list(itertools.chain(*history.uploads[-3:])):
+            if r.to_id in agents:
+                agents[r.to_id] = agents[r.to_id] + r.bw
+            else:
+                agents[r.to_id] = r.bw
+
+        logging.debug("Uploads: " + str(agents))
+
+
+        peer_list = sorted(agents, key=agents.get)
+        others = [y.id for y in peers if (y.id not in peer_list)]
+        random.shuffle(others)
+        peer_list += others
+        peers.sort(key = lambda x : peer_list.index(x.id))
+        logging.debug("Peer list: " + str(peer_list))
+        logging.debug("Peers: " + str(peers))
+
         # request all available pieces from all peers!
         # (up to self.max_requests from each)
         for peer in peers:
-            av_set = set(peer.available_pieces)
-            isect = av_set.intersection(np_set)
-            n = min(self.max_requests, len(isect))
-            # More symmetry breaking -- ask for random pieces.
-            # This would be the place to try fancier piece-requesting strategies
-            # to avoid getting the same thing from multiple peers at a time.
-            for piece_id in random.sample(isect, n):
-                # aha! The peer has this piece! Request it.
-                # which part of the piece do we need next?
-                # (must get the next-needed blocks in order)
+            #get list of all pieces that we need that peer has in order of availability (rarest first)
+            peer_request = [y for y in to_request if (y[1] in list(peer.available_pieces))]
+            logging.debug("Pieces that peer " + peer.id + " has that I don't: " + str(peer_request))
+
+            request_list = []
+            if len(peer_request) == 0:
+                continue
+
+            if len(peer_request) == 1:
+                start_block = self.pieces[peer_request[0][1]]
+                r = Request(self.id, peer.id, peer_request[0][1], start_block)
+                requests.append(r)
+                continue
+
+            level_list = [peer_request[0][1]]
+            for i in range(1, len(peer_request)):
+                if(peer_request[i][0]) == peer_request[i - 1][0] and i < len(peer_request) - 1:
+                    logging.debug("same level, appending")
+                    level_list.append(peer_request[i][1])
+                else:
+                    logging.debug("End of level " + `peer_request[i][0]` + " found")
+                    if(peer_request[-1:][0] == peer_request[0][0]):
+                        logging.debug("Only one level found, randomizing across it")
+                        request_list = random.sample([y for (x,y) in peer_request], self.max_requests)
+                        break
+                    if len(level_list) + len(request_list) > self.max_requests:
+                        logging.debug("this level would put it over the limit, randomizing")
+                        request_list += random.sample(level_list, self.max_requests - len(request_list))
+                        break
+                    else:
+                        logging.debug("This level doesn't fill up max requests, moving on to next level")
+                        request_list += level_list
+                        level_list = [peer_request[i][1]]
+            logging.debug("Request list for peer " + peer.id + " = " + str(request_list))
+
+            for piece_id in request_list:
                 start_block = self.pieces[piece_id]
                 r = Request(self.id, peer.id, piece_id, start_block)
                 requests.append(r)
-
+        logging.debug("Requests FINAL: " + str(requests))
         return requests
 
     def uploads(self, requests, peers, history):
