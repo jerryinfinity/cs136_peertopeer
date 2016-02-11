@@ -111,11 +111,7 @@ class JERONTyrant(Peer):
         # has a list of Download objects for each Download to this peer in
         # the previous round.
 
-        # peers j that I upload to and j downloads to this agent 
-        most_recent_downloads = history.downloads[-1]
-        # dict from_id: total number of blocks downloaded last round
 
-        peers_unchoke_me = [download.from_id for download in most_recent_downloads]
 
         if history.current_round == 0:
             
@@ -123,6 +119,18 @@ class JERONTyrant(Peer):
                 self.unchoke_me_count[p] = 0
 
         else:
+            logging.debug("not first round")
+            print "NOT FIRST ROUND"
+            print history.downloads
+
+            # need to put here because if first round, history.downloads is empty
+            # and you will get index out of bound error
+
+            # peers j that I upload to and j downloads to this agent 
+            most_recent_downloads = history.downloads[len(history.downloads)-1]
+            # dict from_id: total number of blocks downloaded last round
+
+            peers_unchoke_me = [download.from_id for download in most_recent_downloads]
 
             for p in peers:
                 # if p unchokes me last period
@@ -132,23 +140,23 @@ class JERONTyrant(Peer):
                     self.unchoke_me_count[p] = 0
 
 
-        # START estimating d_j and u_j
+            # START estimating d_j and u_j
 
-        for download in most_recent_downloads:
-            if download.from_id not in download_rates.keys():
-                download_rates[download.from_id] = download.blocks
-            else:
-                download_rates[download.from_id] += download.blocks
+            for download in most_recent_downloads:
+                if download.from_id not in download_rates.keys():
+                    download_rates[download.from_id] = download.blocks
+                else:
+                    download_rates[download.from_id] += download.blocks
 
-        for p in peers:
-            # for peers that don't unchoke me, use stale estimate from
-            # block announcement rate
-            # for peer j, if b pieces are available, r rounds so far, then
-            # peer j's download rate is b*blocks_per_piece/r
-            # assume that for peer j, upload rate and download rate are equal,
-            # so this is an estimate for d_j
-            if p not in peers_unchoke_me:
-                download_rates[p] = p.available_pieces*self.conf.blocks_per_piece/history.current_round
+            for p in peers:
+                # for peers that don't unchoke me, use stale estimate from
+                # block announcement rate
+                # for peer j, if b pieces are available, r rounds so far, then
+                # peer j's download rate is b*blocks_per_piece/r
+                # assume that for peer j, upload rate and download rate are equal,
+                # so this is an estimate for d_j
+                if p not in peers_unchoke_me:
+                    download_rates[p] = p.available_pieces*self.conf.blocks_per_piece/history.current_round
 
         # Now, estimate u_j upload_rates
         # if first round (current_round==0) initialize with equal split capacities
@@ -199,9 +207,6 @@ class JERONTyrant(Peer):
                 if sum_of_u <= cap:
                     peers_to_unchoke += triple[0]
 
-
-            request = random.choice(requests)
-            chosen = [request.requester_id]
             # Evenly "split" my upload bandwidth among the one chosen requester
             bws = even_split(self.up_bw, len(peers_to_unchoke))
 
