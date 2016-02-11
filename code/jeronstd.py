@@ -84,7 +84,7 @@ class JERONStd(Peer):
         logging.debug("Uploads: " + str(agents))
 
 
-        peer_list = sorted(agents, key=agents.get)
+        peer_list = sorted(agents, key=agents.get, reverse=True)
         others = [y.id for y in peers if (y.id not in peer_list)]
         random.shuffle(others)
         peer_list += others
@@ -103,19 +103,22 @@ class JERONStd(Peer):
             if len(peer_request) == 0:
                 continue
 
-            if len(peer_request) == 1:
-                start_block = self.pieces[peer_request[0][1]]
-                r = Request(self.id, peer.id, peer_request[0][1], start_block)
-                requests.append(r)
+            if len(peer_request) <= self.max_requests:
+                for pr in peer_request:
+                    start_block = self.pieces[pr[1]]
+                    r = Request(self.id, peer.id, pr[1], start_block)
+                    requests.append(r)
+                logging.debug("Total pieces they have is less than my limit, so gimme all of them!!")
                 continue
 
+            #adds requests until max_request reached, randomizing over the pieces with the least rarity at the end of the list
             level_list = [peer_request[0][1]]
             for i in range(1, len(peer_request)):
                 if(peer_request[i][0]) == peer_request[i - 1][0] and i < len(peer_request) - 1:
                     logging.debug("same level, appending")
                     level_list.append(peer_request[i][1])
                 else:
-                    logging.debug("End of level " + `peer_request[i][0]` + " found")
+                    logging.debug("End of level " + `peer_request[i - 1][0]` + " found")
                     if(peer_request[-1:][0] == peer_request[0][0]):
                         logging.debug("Only one level found, randomizing across it")
                         request_list = random.sample([y for (x,y) in peer_request], self.max_requests)
@@ -151,22 +154,42 @@ class JERONStd(Peer):
         round = history.current_round()
         logging.debug("%s again.  It's round %d." % (
             self.id, round))
-        # One could look at other stuff in the history too here.
-        # For example, history.downloads[round-1] (if round != 0, of course)
-        # has a list of Download objects for each Download to this peer in
-        # the previous round.
+        # get top 3 agents from last 2 rounds and respond to their requests
+        agents = {}
+        for r in list(itertools.chain(*history.downloads[-2:])):
+            if r.from_id in agents:
+                agents[r.from_id] = agents[r.from_id] + r.blocks
+            else:
+                agents[r.from_id] = r.blocks
 
+        
+        neighbor_list = sorted(agents, key=agents.get, reverse=True)
+        logging.debug("Downloads: " + str(agents))
+        chosen = ['Seed0'] * 4
+        bws = []
         if len(requests) == 0:
             logging.debug("No one wants my pieces!")
-            chosen = []
-            bws = []
-        else:
-            logging.debug("Still here: uploading to a random peer")
-            # change my internal state for no reason
-            self.dummy_state["cake"] = "pie"
 
-            request = random.choice(requests)
-            chosen = [request.requester_id]
+        else:
+            logging.debug("Still here: uploading to my 3 best peers")
+            #choose favorite neighbors to fill my 3 slots!!
+            count = 0
+            i = 0
+            while count != 3 and i != len(neighbor_list):
+                if neighbor_list[i] in [x.requester_id for x in requests] and "Seed" not in neighbor_list[i]:
+                    chosen[count] = neighbor_list[i]
+                    count += 1
+                i += 1
+            #if fewer than 3 people have been interested, fill in my other slots optimistically (randomly)
+            if count < 3:
+                unchosen = [x.requester_id for x in requests if x.requester_id not in chosen and "Seed0" != x.requester_id]
+                needed_random = min(4 - count, len(unchosen))
+                chosen[count:count + needed_random] = random.sample(unchosen, needed_random)
+
+            #if all slots filled, every 3 rounds, optimistically unchoke last slot
+            elif round % 3 == 0:
+                chosen[3] = random.choice([x.requester_id for x in requests if x.requester_id not in chosen and "Seed0" != x.requester_id])
+            logging.debug("Chosen to upload to: " + str(chosen))
             # Evenly "split" my upload bandwidth among the one chosen requester
             bws = even_split(self.up_bw, len(chosen))
 
