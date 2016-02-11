@@ -16,6 +16,28 @@ from peer import Peer
 class JERONTyrant(Peer):
     def post_init(self):
         print "post_init(): %s here!" % self.id
+
+        self.NUM_SLOTS = 4
+
+        # constants, Piatek et al (2007)
+        self.ALPHA = 0.2
+        self.GAMMA = 0.1
+
+        # how many periods earlier each peer j unchokes me 
+        self.unchoke_me_count = dict()
+
+
+        # estimate d_j, download rate, and u_j, upload rate, for each neighbor j 
+
+        # estimates of d_j, the current download rate that j provides its unchoked peers
+        # if I am currently unchoked by j, d_j is the actual download bandwidth
+        # otherwise I estimate d_j. 
+        self.download_rates = dict()
+        # estimates of u_j, the upload rate a peer must allocate to peer j to become 
+        # unchoked at j
+        self.upload_rates = dict()
+
+
         self.dummy_state = dict()
         self.dummy_state["cake"] = "lie"
     
@@ -89,22 +111,102 @@ class JERONTyrant(Peer):
         # has a list of Download objects for each Download to this peer in
         # the previous round.
 
+        # peers j that I upload to and j downloads to this agent 
+        most_recent_downloads = history.downloads[-1]
+        # dict from_id: total number of blocks downloaded last round
+
+        peers_unchoke_me = [download.from_id for download in most_recent_downloads]
+
+        if history.current_round == 0:
+            
+            for p in peers:
+                self.unchoke_me_count[p] = 0
+
+        else:
+
+            for p in peers:
+                # if p unchokes me last period
+                if p in peers_unchoke_me:
+                    self.unchoke_me_count[p] += 1
+                else:
+                    self.unchoke_me_count[p] = 0
+
+
+        # START estimating d_j and u_j
+
+        for download in most_recent_downloads:
+            if download.from_id not in download_rates.keys():
+                download_rates[download.from_id] = download.blocks
+            else:
+                download_rates[download.from_id] += download.blocks
+
+        for p in peers:
+            # for peers that don't unchoke me, use stale estimate from
+            # block announcement rate
+            # for peer j, if b pieces are available, r rounds so far, then
+            # peer j's download rate is b*blocks_per_piece/r
+            # assume that for peer j, upload rate and download rate are equal,
+            # so this is an estimate for d_j
+            if p not in peers_unchoke_me:
+                download_rates[p] = p.available_pieces*self.conf.blocks_per_piece/history.current_round
+
+        # Now, estimate u_j upload_rates
+        # if first round (current_round==0) initialize with equal split capacities
+        # if not first round, 
+
+        if history.current_round == 0:
+            for p in peers:
+                upload_rates[p] = self.up_bw/self.NUM_SLOTS
+        else:
+            for p in peers:
+                # if peer p unchokes this agent for the last 3 periods
+                # 3 periods - constant from Piatek et al
+                if self.peers_unchoke_me[p] >= 3:
+                    upload_rates[p] = (1-self.GAMMA)*upload_rates[p]
+                if p not in peers_unchoke_me:
+                    upload_rates[p] = (1+self.ALPHA)*upload_rates[p]
+
+        # END estimating d_j and u_j
+
+        # NOW start processing the request
+
         if len(requests) == 0:
             logging.debug("No one wants my pieces!")
-            chosen = []
+            # it used to be called "chosen" This name is more descriptive
+            peers_to_unchoke = []
             bws = []
         else:
-            logging.debug("Still here: uploading to a random peer")
-            # change my internal state for no reason
-            self.dummy_state["cake"] = "pie"
+            requests_id = [request.id for request in requests]
+            # use list, because we want to sort by d_j/u_j
+            # each element in list is (peer_id, d_j, u_j)
+            triples = []
+            for r_id in requests_id:
+                triples[r_id] = (r_id, download_rates[r_id], upload_rates[r_id])
+
+            # sort by d_j/u_j in descending order
+            triples = sorted(triples, key=lambda x: x[1]/x[2], reverse=True)
+
+            peers_to_unchoke = []
+
+            sum_of_u = 0
+
+            # This can be determined dynamically, but here we will just fix it
+            cap = self.up_bw
+
+            # keep adding peers to unchoke until sum of u-s exceed cap
+            for triple in triples:
+                sum_of_u += triple[2]
+                if sum_of_u <= cap:
+                    peers_to_unchoke += triple[0]
+
 
             request = random.choice(requests)
             chosen = [request.requester_id]
             # Evenly "split" my upload bandwidth among the one chosen requester
-            bws = even_split(self.up_bw, len(chosen))
+            bws = even_split(self.up_bw, len(peers_to_unchoke))
 
         # create actual uploads out of the list of peer ids and bandwidths
         uploads = [Upload(self.id, peer_id, bw)
-                   for (peer_id, bw) in zip(chosen, bws)]
+                   for (peer_id, bw) in zip(peers_to_unchoke, bws)]
             
         return uploads
