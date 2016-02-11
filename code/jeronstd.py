@@ -184,11 +184,14 @@ class JERONStd(Peer):
             if count < 3:
                 unchosen = [x.requester_id for x in requests if x.requester_id not in chosen and "Seed0" != x.requester_id]
                 needed_random = min(4 - count, len(unchosen))
-                chosen[count:count + needed_random] = random.sample(unchosen, needed_random)
+                if len(unchosen) >= needed_random:
+                    chosen[count:count + needed_random] = random.sample(unchosen, needed_random)
 
             #if all slots filled, every 3 rounds, optimistically unchoke last slot
             elif round % 3 == 0:
-                chosen[3] = random.choice([x.requester_id for x in requests if x.requester_id not in chosen and "Seed0" != x.requester_id])
+                unchosen = [x.requester_id for x in requests if x.requester_id not in chosen and "Seed0" != x.requester_id]
+                if len(unchosen) > 0:
+                    chosen[3] = random.choice(unchosen)
             logging.debug("Chosen to upload to: " + str(chosen))
             # Evenly "split" my upload bandwidth among the one chosen requester
             bws = even_split(self.up_bw, len(chosen))
