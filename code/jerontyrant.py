@@ -14,6 +14,8 @@ from util import even_split
 from peer import Peer
 
 class JERONTyrant(Peer):
+  
+
     def post_init(self):
         print "post_init(): %s here!" % self.id
 
@@ -26,7 +28,6 @@ class JERONTyrant(Peer):
         # how many periods earlier each peer j unchokes me 
         self.unchoke_me_count = dict()
 
-
         # estimate d_j, download rate, and u_j, upload rate, for each neighbor j 
 
         # estimates of d_j, the current download rate that j provides its unchoked peers
@@ -36,6 +37,7 @@ class JERONTyrant(Peer):
         # estimates of u_j, the upload rate a peer must allocate to peer j to become 
         # unchoked at j
         self.upload_rates = dict()
+      
 
 
         self.dummy_state = dict()
@@ -135,10 +137,10 @@ class JERONTyrant(Peer):
         # START estimating d_j and u_j
 
         for download in most_recent_downloads:
-            if download.from_id not in download_rates.keys():
-                download_rates[download.from_id] = download.blocks
+            if download.from_id not in self.download_rates.keys():
+                self.download_rates[download.from_id] = download.blocks
             else:
-                download_rates[download.from_id] += download.blocks
+                self.download_rates[download.from_id] += download.blocks
 
         for p in peers:
             # for peers that don't unchoke me, use stale estimate from
@@ -148,7 +150,7 @@ class JERONTyrant(Peer):
             # assume that for peer j, upload rate and download rate are equal,
             # so this is an estimate for d_j
             if p not in peers_unchoke_me:
-                download_rates[p] = p.available_pieces*self.conf.blocks_per_piece/history.current_round
+                self.download_rates[p] = p.available_pieces * self.conf.blocks_per_piece / history.current_round
 
         # Now, estimate u_j upload_rates
         # if first round (current_round==0) initialize with equal split capacities
@@ -156,15 +158,15 @@ class JERONTyrant(Peer):
 
         if history.current_round == 0:
             for p in peers:
-                upload_rates[p] = self.up_bw/self.NUM_SLOTS
+                self.upload_rates[p] = self.up_bw / self.NUM_SLOTS
         else:
             for p in peers:
                 # if peer p unchokes this agent for the last 3 periods
                 # 3 periods - constant from Piatek et al
                 if self.peers_unchoke_me[p] >= 3:
-                    upload_rates[p] = (1-self.GAMMA)*upload_rates[p]
+                    self.upload_rates[p] = (1-self.GAMMA) * self.upload_rates[p]
                 if p not in peers_unchoke_me:
-                    upload_rates[p] = (1+self.ALPHA)*upload_rates[p]
+                    self.upload_rates[p] = (1+self.ALPHA) * self.upload_rates[p]
 
         # END estimating d_j and u_j
 
@@ -181,7 +183,7 @@ class JERONTyrant(Peer):
             # each element in list is (peer_id, d_j, u_j)
             triples = []
             for r_id in requests_id:
-                triples[r_id] = (r_id, download_rates[r_id], upload_rates[r_id])
+                triples[r_id] = (r_id, self.download_rates[r_id], self.upload_rates[r_id])
 
             # sort by d_j/u_j in descending order
             triples = sorted(triples, key=lambda x: x[1]/x[2], reverse=True)
@@ -200,8 +202,8 @@ class JERONTyrant(Peer):
                     peers_to_unchoke += triple[0]
 
 
-            request = random.choice(requests)
-            chosen = [request.requester_id]
+            #request = random.choice(requests)
+            #chosen = [request.requester_id]
             # Evenly "split" my upload bandwidth among the one chosen requester
             bws = even_split(self.up_bw, len(peers_to_unchoke))
 
