@@ -13,11 +13,19 @@ from messages import Upload, Request
 from util import even_split
 from peer import Peer
 
+import itertools
+
 class JERONPropShare(Peer):
     def post_init(self):
         print "post_init(): %s here!" % self.id
         self.dummy_state = dict()
         self.dummy_state["cake"] = "lie"
+
+        # ratio of bandwidth allocated to optimistic unchoking to total upload bw available
+        self.OPT_UNCHOKE_RATIO = 0.10 
+
+
+
     
     def requests(self, peers, history):
         """
@@ -98,10 +106,47 @@ class JERONPropShare(Peer):
             # change my internal state for no reason
             self.dummy_state["cake"] = "pie"
 
-            request = random.choice(requests)
-            chosen = [request.requester_id]
-            # Evenly "split" my upload bandwidth among the one chosen requester
-            bws = even_split(self.up_bw, len(chosen))
+            # modified this from JERONStd
+            # who uploads to me last round and by how much?
+            # agents contains those uploaded to me last round
+            # this list explosion with [-1:] prevents bugs when history.downloads is empty
+            agents = {}
+            for r in list(itertools.chain(*history.downloads[-1:])):
+                if r.from_id in agents:
+                    agents[r.from_id] = agents[r.from_id] + r.blocks
+                else:
+                    agents[r.from_id] = r.blocks
+
+            
+
+            total_blocks_received = sum(agents.values())
+
+            requests_id = [request.requester_id for request in requests]
+
+            # id of peers that upload to this agent last round and request me this round
+            # they will get proportional shares
+            
+            prop_peers = [r_id for r_id in agents.keys() if r_id in requests_id]
+
+            # peers that request to me this round but did not give me last round
+            # one of them will be optimistically unchoked
+            optimistic_peers = [r_id for r_id in requests_id if r_id not in prop_peers]
+
+            # now build chosen and bws
+            chosen = []
+            bws = []
+
+            # peer_bw_pair = []
+            for p in prop_peers:
+                chosen += [p]
+                bws += [agents[p]*self.up_bw*(1-self.OPT_UNCHOKE_RATIO)/total_blocks_received]
+
+            # random.choice gives error if the input sequence is empty, hence this
+            if len(optimistic_peers)>0:
+                lucky_peer_id = random.choice(optimistic_peers)
+                chosen += [lucky_peer_id]
+                bws += [self.OPT_UNCHOKE_RATIO*self.up_bw]
+
 
         # create actual uploads out of the list of peer ids and bandwidths
         uploads = [Upload(self.id, peer_id, bw)
