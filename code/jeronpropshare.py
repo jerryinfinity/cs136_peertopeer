@@ -139,13 +139,13 @@ class JERONPropShare(Peer):
             # peer_bw_pair = []
             for p in prop_peers:
                 chosen += [p]
-                bws += [agents[p]*self.up_bw*(1-self.OPT_UNCHOKE_RATIO)/total_blocks_received]
+                bws += [int(agents[p]*self.up_bw*(1-self.OPT_UNCHOKE_RATIO)/total_blocks_received)]
 
             # random.choice gives error if the input sequence is empty, hence this
             if len(optimistic_peers)>0:
                 lucky_peer_id = random.choice(optimistic_peers)
                 chosen += [lucky_peer_id]
-                bws += [self.OPT_UNCHOKE_RATIO*self.up_bw]
+                bws += [int(self.OPT_UNCHOKE_RATIO*self.up_bw)]
 
 
         # create actual uploads out of the list of peer ids and bandwidths
