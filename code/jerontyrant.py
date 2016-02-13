@@ -14,6 +14,7 @@ from util import even_split
 from peer import Peer
 
 import itertools
+import sys
 
 class JERONTyrant(Peer):
   
@@ -181,13 +182,7 @@ class JERONTyrant(Peer):
             for p in peers:
                 self.upload_rates[p.id] = self.up_bw / self.NUM_SLOTS
         else:
-            print "self.upload_rates.keys()"
-            print self.upload_rates.keys()
-            print "self upload rates"
-            print self.upload_rates
-            for p in peers:
-                print p
-                print self.upload_rates[p.id]
+
             for p in peers:
                 # if peer p unchokes this agent for the last 3 periods
                 # 3 periods - constant from Piatek et al
@@ -213,11 +208,10 @@ class JERONTyrant(Peer):
             for r_id in requests_id:
                 triples += [(r_id, self.download_rates[r_id], self.upload_rates[r_id])]
 
-            print "TRIPLES"
-            print triples
+
 
             # sort by d_j/u_j in descending order
-            triples = sorted(triples, key=lambda x: x[1]/x[2], reverse=True)
+            triples = sorted(triples, key=lambda x: x[1]/x[2] if x[2]!=0 else sys.float_info.max, reverse=True)
 
             peers_to_unchoke = []
 
@@ -234,7 +228,10 @@ class JERONTyrant(Peer):
 
 
             # Evenly "split" my upload bandwidth among the one chosen requester
-            bws = even_split(self.up_bw, len(peers_to_unchoke))
+            if len(peers_to_unchoke) > 0:
+                bws = even_split(self.up_bw, len(peers_to_unchoke))
+            else:
+                bws = []
 
         # create actual uploads out of the list of peer ids and bandwidths
         uploads = [Upload(self.id, peer_id, bw)
