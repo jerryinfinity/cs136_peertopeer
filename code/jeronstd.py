@@ -19,6 +19,7 @@ class JERONStd(Peer):
         print "post_init(): %s here!" % self.id
         self.dummy_state = dict()
         self.dummy_state["cake"] = "lie"
+        self.chosen = ['Seed0'] * 4
     
     def requests(self, peers, history):
         """
@@ -165,7 +166,7 @@ class JERONStd(Peer):
         
         neighbor_list = sorted(agents, key=agents.get, reverse=True)
         logging.debug("Downloads: " + str(agents))
-        chosen = ['Seed0'] * 4
+        
         bws = []
         if len(requests) == 0:
             logging.debug("No one wants my pieces!")
@@ -177,27 +178,29 @@ class JERONStd(Peer):
             i = 0
             while count != 3 and i != len(neighbor_list):
                 if neighbor_list[i] in [x.requester_id for x in requests] and "Seed" not in neighbor_list[i]:
-                    chosen[count] = neighbor_list[i]
+                    self.chosen[count] = neighbor_list[i]
                     count += 1
                 i += 1
             #if fewer than 3 people have been interested, fill in my other slots optimistically (randomly)
             if count < 3:
-                unchosen = [x.requester_id for x in requests if x.requester_id not in chosen and "Seed0" != x.requester_id]
+                unchosen = [x.requester_id for x in requests if x.requester_id not in self.chosen and "Seed0" != x.requester_id]
                 needed_random = min(4 - count, len(unchosen))
                 if len(unchosen) >= needed_random:
-                    chosen[count:count + needed_random] = random.sample(unchosen, needed_random)
+                    self.chosen[count:count + needed_random] = random.sample(unchosen, needed_random)
 
             #if all slots filled, every 3 rounds, optimistically unchoke last slot
             elif round % 3 == 0:
-                unchosen = [x.requester_id for x in requests if x.requester_id not in chosen and "Seed0" != x.requester_id]
+                unchosen = [x.requester_id for x in requests if x.requester_id not in self.chosen and "Seed0" != x.requester_id]
                 if len(unchosen) > 0:
-                    chosen[3] = random.choice(unchosen)
-            logging.debug("Chosen to upload to: " + str(chosen))
+                    unchoke = random.choice(unchosen)
+                    logging.debug("round : " + `round` + ". Optimistically unchoking " + `unchoke`)
+                    self.chosen[3] = unchoke
+            logging.debug("Chosen to upload to: " + str(self.chosen))
             # Evenly "split" my upload bandwidth among the one chosen requester
-            bws = even_split(self.up_bw, len(chosen))
+            bws = even_split(self.up_bw, len(self.chosen))
 
         # create actual uploads out of the list of peer ids and bandwidths
         uploads = [Upload(self.id, peer_id, bw)
-                   for (peer_id, bw) in zip(chosen, bws)]
+                   for (peer_id, bw) in zip(self.chosen, bws)]
             
         return uploads

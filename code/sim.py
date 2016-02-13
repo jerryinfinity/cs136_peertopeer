@@ -418,9 +418,7 @@ def parse_agents(args):
         else:
             raise ValueError("Bad argument: %s\n" % c)
     return ans
-            
-        
-
+                    
 def main(args):
     usage_msg = "Usage:  %prog [options] PeerClass1[,count] PeerClass2[,count] ..."
     parser = OptionParser(usage=usage_msg)
