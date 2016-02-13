@@ -118,6 +118,7 @@ class JERONTyrant(Peer):
 
 
 
+
         if history.current_round() == 0:
             
             for p in peers:
@@ -211,7 +212,7 @@ class JERONTyrant(Peer):
 
 
             # sort by d_j/u_j in descending order
-            triples = sorted(triples, key=lambda x: x[1]/x[2] if x[2]!=0 else sys.float_info.max, reverse=True)
+            triples = sorted(triples, key=lambda x: 1.*x[1]/x[2] if x[2]!=0 else sys.float_info.max, reverse=True)
 
             peers_to_unchoke = []
 
@@ -220,11 +221,13 @@ class JERONTyrant(Peer):
             # This can be determined dynamically, but here we will just fix it
             cap = self.up_bw
 
+
             # keep adding peers to unchoke until sum of u-s exceed cap
             for triple in triples:
                 sum_of_u += triple[2]
                 if sum_of_u <= cap:
-                    peers_to_unchoke += triple[0]
+                    peers_to_unchoke += [triple[0]]
+
 
 
             # Evenly "split" my upload bandwidth among the one chosen requester
