@@ -122,8 +122,7 @@ class JERONTyrant(Peer):
 
         else:
             logging.debug("not first round")
-            print "NOT FIRST ROUND"
-            print history.downloads
+            logging.debug( str(history.downloads))
 
             # need to put here because if first round, history.downloads is empty
             # and you will get index out of bound error
@@ -146,10 +145,10 @@ class JERONTyrant(Peer):
 
 
             for download in most_recent_downloads:
-                if download.from_id not in download_rates.keys():
-                    download_rates[download.from_id] = download.blocks
+                if download.from_id not in self.download_rates.keys():
+                    self.download_rates[download.from_id] = download.blocks
                 else:
-                    download_rates[download.from_id] += download.blocks
+                    self.download_rates[download.from_id] += download.blocks
 
             for p in peers:
                 # for peers that don't unchoke me, use stale estimate from
@@ -159,7 +158,7 @@ class JERONTyrant(Peer):
                 # assume that for peer j, upload rate and download rate are equal,
                 # so this is an estimate for d_j
                 if p not in peers_unchoke_me:
-                    download_rates[p] = p.available_pieces*self.conf.blocks_per_piece/history.current_round
+                    self.download_rates[p] = p.available_pieces*self.conf.blocks_per_piece/history.current_round
 
         for download in most_recent_downloads:
             if download.from_id not in self.download_rates.keys():
