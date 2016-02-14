@@ -131,16 +131,16 @@ class JERONTyrant(Peer):
 
             # peers j that I upload to and j downloads to this agent 
 
-            # no longer needed
-            # most_recent_downloads = history.downloads[len(history.downloads)-1]
-
-            # dict from_id: total number of blocks downloaded last round
-
-            # peers_unchoke_me = [download.from_id for download in most_recent_downloads]
 
             peers_unchoke_me = []
             for r in list(itertools.chain(*history.downloads[-1:])):
                 peers_unchoke_me += [r.from_id]
+
+            peers_I_unchoke = []
+            for r in list(itertools.chain(*history.uploads[-1:])):
+                peers_unchoke_me += [r.from_id]
+
+            logging.debug("These peers unchoke me last round: " + str(peers_unchoke_me))
 
             for p in peers:
                 # if p unchokes me last period
@@ -149,6 +149,7 @@ class JERONTyrant(Peer):
                 else:
                     self.unchoke_me_count[p.id] = 0
 
+            logging.debug("self.unchoke_me_count: " + str(self.unchoke_me_count))
 
             # START estimating d_j and u_j
 
@@ -177,18 +178,23 @@ class JERONTyrant(Peer):
 
         if history.current_round() == 0:
             for p in peers:
-                self.upload_rates[p.id] = self.up_bw / self.NUM_SLOTS
+                # self.upload_rates[p.id] = self.up_bw / self.NUM_SLOTS
+                self.upload_rates[p.id] = 0.01
         else:
 
             for p in peers:
                 # if peer p unchokes this agent for the last 3 periods
                 # 3 periods - constant from Piatek et al
-                if self.unchoke_me_count[p.id] >= 3:
+                if self.unchoke_me_count[p.id] >= 3 and p in peers_I_unchoke:
                     self.upload_rates[p.id] *= (1-self.GAMMA) 
-                if p not in peers_unchoke_me:
+
+                if p not in peers_unchoke_me and p in peers_I_unchoke:
                     self.upload_rates[p.id] *= (1+self.ALPHA) 
 
         # END estimating d_j and u_j
+
+        logging.debug("self.download_rates: " + str(self.download_rates))
+        logging.debug("self.upload_rates: " + str(self.upload_rates))
 
         # NOW start processing the request
 
@@ -199,6 +205,7 @@ class JERONTyrant(Peer):
             bws = []
         else:
             requests_id = [request.requester_id for request in requests]
+            logging.debug("")
             # use list, because we want to sort by d_j/u_j
             # each element in list is (peer_id, d_j, u_j)
             triples = []
@@ -209,6 +216,8 @@ class JERONTyrant(Peer):
 
             # sort by d_j/u_j in descending order
             triples = sorted(triples, key=lambda x: 1.*x[1]/x[2] if x[2]!=0 else sys.float_info.max, reverse=True)
+
+            logging.debug("triples (id, d_j, u_j): " + str(triples))
 
             peers_to_unchoke = []
 
