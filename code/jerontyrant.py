@@ -136,6 +136,10 @@ class JERONTyrant(Peer):
             for r in list(itertools.chain(*history.downloads[-1:])):
                 peers_unchoke_me += [r.from_id]
 
+            peers_I_unchoke = []
+            for r in list(itertools.chain(*history.uploads[-1:])):
+                peers_unchoke_me += [r.from_id]
+
             logging.debug("These peers unchoke me last round: " + str(peers_unchoke_me))
 
             for p in peers:
@@ -181,9 +185,10 @@ class JERONTyrant(Peer):
             for p in peers:
                 # if peer p unchokes this agent for the last 3 periods
                 # 3 periods - constant from Piatek et al
-                if self.unchoke_me_count[p.id] >= 3:
+                if self.unchoke_me_count[p.id] >= 3 and p in peers_I_unchoke:
                     self.upload_rates[p.id] *= (1-self.GAMMA) 
-                if p not in peers_unchoke_me:
+
+                if p not in peers_unchoke_me and p in peers_I_unchoke:
                     self.upload_rates[p.id] *= (1+self.ALPHA) 
 
         # END estimating d_j and u_j
