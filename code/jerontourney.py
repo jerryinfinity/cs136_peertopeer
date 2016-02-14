@@ -45,7 +45,7 @@ class JERONTourney(Peer):
 
         logging.debug("And look, I have my entire history available too:")
         logging.debug("look at the AgentHistory class in history.py for details")
-        logging.debug(str(history))
+       # logging.debug(str(history))
 
         availability = [(0,0)] * self.conf.num_pieces
         for peer in peers:
@@ -170,13 +170,6 @@ class JERONTourney(Peer):
         peer_available = {}
         for peer in peers:
             peer_available[peer.id] = list(set(peer.available_pieces).intersection(set(needed_pieces)))
-        logging.debug("PEER AVAILABLE = " + str(peer_available))
-        logging.debug("NEIGHBOR LIST = " + str(neighbor_list))
-        nl = len(neighbor_list)
-
-        neighbor_list = [x for x in neighbor_list if len(peer_available[x]) != 0]
-        nl2 = len(neighbor_list)
-        logging.debug("Deleting " + `(nl2 - nl)` + " peers from neighbor_list that don't have what I want")
         logging.debug("Downloads: " + str(agents))
         
         bws = []
@@ -189,19 +182,19 @@ class JERONTourney(Peer):
             count = 0
             i = 0
             while count != 3 and i != len(neighbor_list):
-                if neighbor_list[i] in [x.requester_id for x in requests] and "Seed" not in neighbor_list[i]:
+                if neighbor_list[i] in [x.requester_id for x in requests] and "Seed" not in neighbor_list[i] and len(peer_available[neighbor_list[i]]) != 0:
                     self.chosen[count] = neighbor_list[i]
                     count += 1
                 i += 1
             #if fewer than 3 people have been interested, fill in my other slots optimistically (randomly)
-            if count < 3:
+            """if count < 3:
                 unchosen = [x.requester_id for x in requests if x.requester_id not in self.chosen and "Seed0" != x.requester_id]
                 needed_random = min(4 - count, len(unchosen))
                 if len(unchosen) >= needed_random:
-                    self.chosen[count:count + needed_random] = random.sample(unchosen, needed_random)
+                    self.chosen[count:count + needed_random] = random.sample(unchosen, needed_random)"""
 
             #if all slots filled, every 3 rounds, optimistically unchoke last slot
-            elif round % 3 == 0:
+            if round % 3 == 0:
                 unchosen = [x.requester_id for x in requests if x.requester_id not in self.chosen and "Seed0" != x.requester_id]
                 if len(unchosen) > 0:
                     unchoke = random.choice(unchosen)
@@ -212,8 +205,16 @@ class JERONTourney(Peer):
             bws = even_split(self.up_bw, len(self.chosen))
 
         #create actual uploads out of the list of peer ids and bandwidths
-        uploads = [Upload(self.id, peer_id, bw)
+        fakeuploads = [Upload(self.id, peer_id, bw)
                    for (peer_id, bw) in zip(self.chosen, bws)]
+        up1 = len(fakeuploads)
+        uploads = [Upload(self.id, peer_id, bw)
+                   for (peer_id, bw) in zip(self.chosen, bws) if len(peer_available[peer_id]) != 0]
+        up2 = len(uploads)
+        if up2 != up1:
+            logging.debug("Didn't upload to " + `(up1 - up2)` + " people who didn't have anything to offer")
+
+
         #uploads = []
         #for peer in chosen:
             #uploads += Upload(self.id, peer.peer_id) 

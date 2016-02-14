@@ -226,7 +226,6 @@ class JERONTyrant(Peer):
             # This can be determined dynamically, but here we will just fix it
             cap = self.up_bw
 
-
             # keep adding peers to unchoke until sum of u-s exceed cap
             for triple in triples:
                 sum_of_u += triple[2]
