@@ -22,6 +22,7 @@ class JERONStd(Peer):
         self.chosen = ['Seed0'] * 4
     
     def requests(self, peers, history):
+        logging.debug("MR " + `self.max_requests`)
         """
         peers: available info about the peers (who has what pieces)
         history: what's happened so far as far as this peer can see
