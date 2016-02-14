@@ -225,7 +225,6 @@ class JERONTyrant(Peer):
                     peers_to_unchoke += [triple[0]]
 
 
-
             # Evenly "split" my upload bandwidth among the one chosen requester
             if len(peers_to_unchoke) > 0:
                 bws = even_split(self.up_bw, len(peers_to_unchoke))
