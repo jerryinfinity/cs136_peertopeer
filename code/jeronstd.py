@@ -135,6 +135,8 @@ class JERONStd(Peer):
                         level_list = [peer_request[i][1]]
             logging.debug("Request list for peer " + peer.id + " = " + str(request_list))
 
+            request_list = request_list[:self.max_requests/ 2] + random.sample([y for (x,y) in peer_request], self.max_requests - self.max_requests/2)
+            logging.debug("RL: " + str(request_list))
             for piece_id in request_list:
                 start_block = self.pieces[piece_id]
                 r = Request(self.id, peer.id, piece_id, start_block)
@@ -178,20 +180,20 @@ class JERONStd(Peer):
             count = 0
             i = 0
             while count != 3 and i != len(neighbor_list):
-                if neighbor_list[i] in [x.requester_id for x in requests] and "Seed" not in neighbor_list[i]:
+                if neighbor_list[i] in [x.requester_id for x in requests]:
                     self.chosen[count] = neighbor_list[i]
                     count += 1
                 i += 1
             #if fewer than 3 people have been interested, fill in my other slots optimistically (randomly)
             if count < 3:
-                unchosen = [x.requester_id for x in requests if x.requester_id not in self.chosen and "Seed0" != x.requester_id]
+                unchosen = [x.requester_id for x in requests if x.requester_id not in self.chosen]
                 needed_random = min(4 - count, len(unchosen))
                 if len(unchosen) >= needed_random:
                     self.chosen[count:count + needed_random] = random.sample(unchosen, needed_random)
 
             #if all slots filled, every 3 rounds, optimistically unchoke last slot
             elif round % 3 == 0:
-                unchosen = [x.requester_id for x in requests if x.requester_id not in self.chosen and "Seed0" != x.requester_id]
+                unchosen = [x.requester_id for x in requests if x.requester_id not in self.chosen]
                 if len(unchosen) > 0:
                     unchoke = random.choice(unchosen)
                     logging.debug("round : " + `round` + ". Optimistically unchoking " + `unchoke`)
