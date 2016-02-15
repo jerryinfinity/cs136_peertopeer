@@ -16,6 +16,14 @@ from peer import Peer
 import itertools
 import sys
 
+def cumsum(mylist):
+    sum = 0
+    ans = []
+    for x in mylist:
+        sum += x
+        ans.append(sum)
+    return ans
+
 class JERONTourneyTyrant(Peer):
   
 
@@ -248,6 +256,35 @@ class JERONTourneyTyrant(Peer):
                 bws = even_split(self.up_bw, len(peers_to_unchoke))
             else:
                 bws = []
+
+        # if we have in peers_to_finish, Peer j: [7,5] means 7 needed to finish first request,
+        # 5 more needed to finish second request, in total of 12 requested
+
+
+
+        peers_to_finish = {}
+        for request in requests:
+            r_id = request.requester_id
+            if not r_id.startswith('Seed'):
+                blocks_needed_to_finish = self.conf.blocks_per_piece - request.start
+                if r_id in peers_to_finish.keys():
+                    # add number of blocks needed to finish this piece to list that peer
+                    peers_to_finish[r_id] += [blocks_needed_to_finish]
+                else:
+                    peers_to_finish[r_id] = [blocks_needed_to_finish]
+
+        # print 'peers_to_finish: ' + str(peers_to_finish)
+        
+        # prevent finishing if they are close to finish
+        for (peer_id, bw) in zip(peers_to_unchoke, bws):
+            if not peer_id.startswith('Seed'):
+                # if I give more bandwidth than they request, reduce given bandwidth
+                if bw > sum(peers_to_finish[peer_id]):
+                    
+                    bw = sum(peers_to_finish[peer_id])
+                # if what we provide will just make them finish, hold one off so they don't finish
+                if bw in cumsum(peers_to_finish[peer_id]):
+                    bw -= 1
 
         # create actual uploads out of the list of peer ids and bandwidths
         uploads = [Upload(self.id, peer_id, bw)
